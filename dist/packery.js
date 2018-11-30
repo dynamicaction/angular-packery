@@ -7,8 +7,7 @@
 
 'use strict';
 
-(function (){
-
+(function () {
   var moduleDependencies = [
     'packeryTemplates'
   ];
@@ -17,9 +16,10 @@
     columnWidth: '.packery-sizer',
     itemSelector: '.packery-object',
     rowHeight: '.packery-sizer',
+    percentPosition: true,
     draggable: true,
-    handle: '*',
-    timeout: 2000,
+    handle: '.widget-header',
+    timeout: 8000,
     acceptedAttributes: [
       'containerStyle',
       'columnWidth',
@@ -31,15 +31,16 @@
       'isResizeBound',
       'itemSelector',
       'rowHeight',
+      'percentPosition',
       'transitionDuration'
     ]
   };
 
-  var packeryService = function($rootScope, $q, $interval, $timeout, config) {
+  var packeryService = function ($rootScope) {
     var created = [],
-        packeryObj;
+      packeryObj;
 
-    var uniqueId = function(obj, list) {
+    var uniqueId = function (obj, list) {
       for (var i = 0; i < list.length; i++) {
         if (list[i].id === obj) {
           return false;
@@ -50,35 +51,20 @@
 
     return {
       Packery: function (hash, el, opts) {
-        var deferred = $q.defer();
-
         el = el || undefined;
         opts = opts || {};
 
         if (uniqueId(hash, created) && el !== undefined) {
-          packeryObj = new Packery(el[0], opts);
+          packeryObj = new window.Packery(el[0], opts);
           created.push({
             id: hash,
             packery: packeryObj
           });
           el.data('Packery', packeryObj);
           $rootScope.$emit('packeryInstantiated', packeryObj);
-          return packeryObj;
-        } else {
-          var interval = $interval(function(){
-            if (packeryObj !== undefined) {
-              $interval.cancel(interval);
-              deferred.resolve(packeryObj);
-            }
-          }, config.timeout / 10);
-
-          $timeout(function() {
-            $interval.cancel(interval);
-            deferred.reject(false);
-          }, config.timeout);
-
-          return deferred.promise;
         }
+
+        return packeryObj;
       }
     };
   };
@@ -93,16 +79,16 @@
     self.uniqueId = new Date().getTime();
     self.packery = {};
 
-    this.bindDragEvents = function(el) {
+    this.bindDragEvents = function (el) {
       var handleSelector, handle, draggabilly;
 
       handleSelector = self.dragHandle;
 
       if (handleSelector === '*') {
-        draggabilly = new Draggabilly(el[0]);
+        draggabilly = new window.Draggabilly(el[0]);
         handle = el;
       } else {
-        draggabilly = new Draggabilly(el[0], {
+        draggabilly = new window.Draggabilly(el[0], {
           handle: handleSelector
         });
         handle = el[0].querySelectorAll(handleSelector);
@@ -112,20 +98,21 @@
       self.packery.bindDraggabillyEvents(draggabilly);
 
       // Bind animate events for touch
-      angular.element(handle).on('mouseenter', function(){
+      angular.element(handle).on('mouseenter', function () {
         el.addClass('hovered');
       }).
-      on('mouseleave', function(){
-        el.removeClass('hovered');
-      });
+        on('mouseleave', function () {
+          el.removeClass('hovered');
+        });
     };
 
     this.createAttrObj = function (scope) {
       var obj = {},
-          attrs = config.acceptedAttributes;
+        attrs = config.acceptedAttributes;
 
       for (var i = 0; i < attrs.length; i++) {
         var attr = scope[attrs[i]];
+
         if (attr !== undefined) {
 
           if (attr === 'null') { // check for 'null' values
@@ -141,23 +128,20 @@
       return obj;
     };
 
-    this.packObject = function (el) {
-      var promise = service.Packery(self.uniqueId);
+    this.packObject = function (el, hasDraggable) {
+      service.Packery(self.uniqueId);
+      var packeryEls = self.packery.getItemElements();
 
-      promise.then(function () {
-        var packeryEls = self.packery.getItemElements();
+      if (packeryEls.indexOf(el[0]) === -1) {
+        self.packery.appended(el[0]);
+      }
 
-        if (packeryEls.indexOf(el[0]) === -1) {
-          self.packery.appended(el[0]);
-        }
+      if (hasDraggable && self.packeryDraggable === true) {
+        self.bindDragEvents(el);
+      }
 
-        if (self.packeryDraggable === true) {
-          self.bindDragEvents(el);
-        }
-
-        el.css('visibility','visible');
-        $rootScope.$emit('packeryObjectPacked', el[0]);
-      });
+      el.css('visibility', 'visible');
+      $rootScope.$emit('packeryObjectPacked', el[0]);
     };
 
     this.setDraggable = function (handle) {
@@ -185,6 +169,7 @@
         isResizeBound: '@?', // Type: Boolean
         itemSelector: '@?', // Type: Selector String
         rowHeight: '@?', // Type: Number, Selector String
+        percentPosition: '@?', // Type: Boolean
         transitionDuration: '@?', // Type: String
 
         draggable: '@?', // Type: Boolean
@@ -201,7 +186,8 @@
         scope.columnWidth = scope.columnWidth || config.columnWidth;
         scope.itemSelector = scope.itemSelector || config.itemSelector;
         scope.rowHeight = scope.rowHeight || config.rowHeight;
-        scope.draggable = scope.draggable || config.draggable;
+        scope.percentPosition = scope.percentPosition || config.percentPosition;
+        scope.draggable = angular.isDefined(scope.draggable) ? scope.draggable : config.draggable;
         scope.handle = scope.handle || config.handle;
 
         // Quick fix so 'false' strings don't evaluate to true
@@ -214,7 +200,7 @@
         if (scope.isResizeBound === 'false') { scope.isResizeBound = false; }
 
         // Creates JS Object for passing CSS styles into Packery
-        if (scope.containerStyle && (typeof scope.containerStyle === 'object' )) { scope.containerStyle = scope.containerStyle; }
+        if (scope.containerStyle && (typeof scope.containerStyle === 'object')) { scope.containerStyle = scope.containerStyle; }
 
         // Set global draggability
         if (scope.draggable) { controller.setDraggable(scope.handle); }
@@ -225,7 +211,7 @@
 
         // Instantiate Packery and broadcast event
         packery = service.Packery(packeryId, element, packeryObj);
-        if (packery instanceof Packery) {
+        if (packery instanceof window.Packery) {
           controller.packeryInstantiated = true;
           controller.packery = packery;
         }
@@ -243,16 +229,23 @@
     };
   };
 
-  var packeryObjectDirective = function () {
+  var packeryObjectDirective = function ($timeout) {
     return {
       require: '^packery',
       restrict: 'C',
       link: function (scope, element, attrs, controller) {
         // Prevents a FOUC on dynamically added objects
-        element.css('visibility','hidden');
+        element.css('visibility', 'hidden');
 
         // Packs individual objects
-        controller.packObject(element);
+        $timeout(function () {
+          if ($(element).hasClass('add-widget')) {
+            controller.packObject(element, false);
+          } else {
+            controller.packObject(element, true);
+          }
+        });
+
       }
     };
   };
@@ -261,27 +254,27 @@
     $templateCache
       .put('template/packery/packery.html', [
         '<div class="packery-wrapper">',
-          '<div class="packery-sizer"></div>',
-          '<div class="packery-container" ng-transclude></div>',
+        '<div class="packery-sizer"></div>',
+        '<div class="gutter-sizer"></div>',
+        '<div class="packery-container" ng-transclude></div>',
         '</div>'
       ].join(''));
 
-    $templateCache
-      .put('template/packery/packery-object.html',
-        '<div class="packery-object" ng-transclude></div>'
-      );
+    $templateCache.put('template/packery/packery-object.html',
+      '<div class="packery-object" ng-transclude></div>'
+    );
   };
 
   angular
     .module('angular-packery', moduleDependencies)
     .constant('packeryConfig', moduleConfig)
-    .service('packeryService', [ '$rootScope', '$q', '$interval', '$timeout', 'packeryConfig', packeryService ])
-    .controller('PackeryController', [ '$rootScope', 'packeryConfig', 'packeryService', packeryController ])
-    .directive('packery', [ 'packeryConfig', 'packeryService', packeryDirective ])
-    .directive('packeryObject', [ packeryObjectTemplateDirective ])
-    .directive('packeryObject', [ packeryObjectDirective ]);
+    .service('packeryService', ['$rootScope', packeryService])
+    .controller('PackeryController', ['$rootScope', 'packeryConfig', 'packeryService', packeryController])
+    .directive('packery', ['packeryConfig', 'packeryService', packeryDirective])
+    .directive('packeryObject', [packeryObjectTemplateDirective])
+    .directive('packeryObject', ['$timeout', packeryObjectDirective]);
 
   angular
-    .module('packeryTemplates', []).run([ '$templateCache', packeryTemplates ]);
+    .module('packeryTemplates', []).run(['$templateCache', packeryTemplates]);
 
 })();
