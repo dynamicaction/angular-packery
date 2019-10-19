@@ -1,7 +1,7 @@
 /*!
  * angular-packery
  * http://github.com/sungard-labs/angular-packery
- * Version: 1.0.4
+ * Version: 1.0.6
  * License: MIT
  */
 
@@ -20,6 +20,7 @@
     draggable: true,
     handle: '.widget-header',
     timeout: 8000,
+    instantiatedEventName: 'packeryInstantiated',
     acceptedAttributes: [
       'containerStyle',
       'columnWidth',
@@ -32,13 +33,14 @@
       'itemSelector',
       'rowHeight',
       'percentPosition',
-      'transitionDuration'
+      'transitionDuration',
+      'instantiatedEventName'
     ]
   };
 
   var packeryService = function ($rootScope) {
     var created = [],
-      packeryObj;
+        packeryObj;
 
     var uniqueId = function (obj, list) {
       for (var i = 0; i < list.length; i++) {
@@ -61,7 +63,7 @@
             packery: packeryObj
           });
           el.data('Packery', packeryObj);
-          $rootScope.$emit('packeryInstantiated', packeryObj);
+          $rootScope.$emit(opts.instantiatedEventName, packeryObj);
         }
 
         return packeryObj;
@@ -101,14 +103,14 @@
       angular.element(handle).on('mouseenter', function () {
         el.addClass('hovered');
       }).
-        on('mouseleave', function () {
-          el.removeClass('hovered');
-        });
+      on('mouseleave', function () {
+        el.removeClass('hovered');
+      });
     };
 
     this.createAttrObj = function (scope) {
       var obj = {},
-        attrs = config.acceptedAttributes;
+          attrs = config.acceptedAttributes;
 
       for (var i = 0; i < attrs.length; i++) {
         var attr = scope[attrs[i]];
@@ -157,7 +159,11 @@
       controller: 'PackeryController',
       transclude: true,
       replace: true,
-      templateUrl: 'template/packery/packery.html',
+      templateUrl: function (element, attrs) {
+        var template =  attrs.template || 'packery';
+
+        return 'template/packery/' + template + '.html';
+      },
       scope: {
         containerStyle: '=?', // Type: Object, null
         columnWidth: '@?', // Type: Number, Selector String
@@ -171,9 +177,10 @@
         rowHeight: '@?', // Type: Number, Selector String
         percentPosition: '@?', // Type: Boolean
         transitionDuration: '@?', // Type: String
+        instantiatedEventName: '@?', // Type: String
 
         draggable: '@?', // Type: Boolean
-        handle: '@?' // Type: Boolean
+        handle: '@?' // Type: Selector String
 
         // Let's come back to this one...
         // stamp: '@?',
@@ -189,6 +196,7 @@
         scope.percentPosition = scope.percentPosition || config.percentPosition;
         scope.draggable = angular.isDefined(scope.draggable) ? scope.draggable : config.draggable;
         scope.handle = scope.handle || config.handle;
+        scope.instantiatedEventName = scope.instantiatedEventName || config.instantiatedEventName;
 
         // Quick fix so 'false' strings don't evaluate to true
         // @TODO: Check for attribute itself, not value of attribute
@@ -229,6 +237,15 @@
     };
   };
 
+  var stackPackeryObjectTemplateDirective = function () {
+    return {
+      restrict: 'EA',
+      templateUrl: 'template/packery/stack-packery-object.html',
+      transclude: true,
+      replace: true
+    };
+  };
+
   var packeryObjectDirective = function ($timeout) {
     return {
       require: '^packery',
@@ -252,29 +269,47 @@
 
   var packeryTemplates = function ($templateCache) {
     $templateCache
-      .put('template/packery/packery.html', [
-        '<div class="packery-wrapper">',
-        '<div class="packery-sizer"></div>',
-        '<div class="gutter-sizer"></div>',
-        '<div class="packery-container" ng-transclude></div>',
-        '</div>'
-      ].join(''));
+        .put('template/packery/packery.html', [
+          '<div class="packery-wrapper">',
+          '<div class="packery-sizer"></div>',
+          '<div class="gutter-sizer"></div>',
+          '<div class="packery-container" ng-transclude></div>',
+          '</div>'
+        ].join(''));
 
     $templateCache.put('template/packery/packery-object.html',
-      '<div class="packery-object" ng-transclude></div>'
+        '<div class="packery-object" ng-transclude></div>'
+    );
+
+    $templateCache
+        .put('template/packery/stack-packery.html', [
+          '<div class="stack-packery-wrapper">',
+          '<div class="stack-packery-sizer"></div>',
+          '<div class="stack-gutter-sizer"></div>',
+          '<div class="stack-packery-container" ng-transclude></div>',
+          '</div>'
+        ].join(''));
+
+    $templateCache.put('template/packery/stack-packery-object.html',
+        '<div class="stack-packery-object" ng-transclude></div>'
     );
   };
 
-  angular
-    .module('angular-packery', moduleDependencies)
-    .constant('packeryConfig', moduleConfig)
-    .service('packeryService', ['$rootScope', packeryService])
-    .controller('PackeryController', ['$rootScope', 'packeryConfig', 'packeryService', packeryController])
-    .directive('packery', ['packeryConfig', 'packeryService', packeryDirective])
-    .directive('packeryObject', [packeryObjectTemplateDirective])
-    .directive('packeryObject', ['$timeout', packeryObjectDirective]);
 
   angular
-    .module('packeryTemplates', []).run(['$templateCache', packeryTemplates]);
+      .module('angular-packery', moduleDependencies)
+      .constant('packeryConfig', moduleConfig)
+      .service('packeryService', ['$rootScope', packeryService])
+      .controller('PackeryController', ['$rootScope', 'packeryConfig', 'packeryService', packeryController])
+      .directive('packery', ['packeryConfig', 'packeryService', packeryDirective])
+      .directive('packeryObject', [packeryObjectTemplateDirective])
+      .directive('packeryObject', ['$timeout', packeryObjectDirective])
+
+      .directive('stackPackery', ['packeryConfig', 'packeryService', packeryDirective])
+      .directive('stackPackeryObject', [stackPackeryObjectTemplateDirective])
+      .directive('stackPackeryObject', ['$timeout', packeryObjectDirective]);
+
+  angular
+      .module('packeryTemplates', []).run(['$templateCache', packeryTemplates]);
 
 })();
